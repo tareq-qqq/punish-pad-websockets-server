@@ -27,7 +27,8 @@ io.on("connection", (socket: Socket) => {
 	// Example: when a client sends a message
 	console.log("Client connected", socket.id);
 	socket.on(
-		"createRoom",
+		"create-room",
+
 		({ repetition, phrase, ownerName, partnerName }, callback) => {
 			const roomId = createRoom(
 				socket,
@@ -36,12 +37,13 @@ io.on("connection", (socket: Socket) => {
 				ownerName,
 				partnerName
 			);
-			callback(roomId);
+			socket.join(roomId);
+			callback({ room: rooms[roomId] });
 		}
 	);
 
 	socket.on(
-		"joinRoom",
+		"join-room",
 		(
 			roomId: string,
 			callback: ({ room, error }: { room?: Room; error?: string }) => void
@@ -50,9 +52,15 @@ io.on("connection", (socket: Socket) => {
 				callback({ error: "Room not found" });
 				return;
 			}
+			// jon the room
 			socket.join(roomId);
-			socket.broadcast.emit("joined-room", roomId, socket.id);
+
+			// emit that you joined the room
+			socket.to(roomId).emit("joined-room", roomId, socket.id);
+
 			console.log("Joined room", roomId, socket.id);
+
+			//acknowledge
 			callback({ room: rooms[roomId] });
 		}
 	);
@@ -97,6 +105,7 @@ function createRoom(
 		hits: 0,
 		misses: 0,
 		currentPhrase: "",
+		roomId,
 	};
 	return roomId;
 }

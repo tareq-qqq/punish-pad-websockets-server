@@ -7,4 +7,5 @@ export interface Room {
 	hits: number;
 	misses: number;
 	currentPhrase: string;
+	roomId: string;
 }
