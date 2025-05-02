@@ -1,6 +1,7 @@
 import { Socket } from "socket.io";
-
 import express from "express";
+import dotenv from "dotenv";
+dotenv.config();
 import http from "http";
 import { Server } from "socket.io";
 import { instrument } from "@socket.io/admin-ui";
@@ -14,14 +15,12 @@ const server = http.createServer(app);
 
 const rooms: Record<string, Room> = {};
 
+const FRONTEND_URL = process.env.FRONTEND_URL;
+console.log("front end url", FRONTEND_URL);
 // Socket.IO server setup
 const io = new Server(server, {
 	cors: {
-		origin: [
-			"http://localhost:3000",
-			"https://admin.socket.io",
-			"http://192.168.1.10:3000",
-		], // <-- Allow all origins for now. Set specific domains later!  // methods: ["GET", "POST"],
+		origin: ["https://admin.socket.io", FRONTEND_URL as string], // <-- Allow all origins for now. Set specific domains later!  // methods: ["GET", "POST"],
 		credentials: true,
 	},
 });
@@ -124,15 +123,16 @@ io.on("connection", (socket: Socket) => {
 });
 
 // Start server
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT;
+console.log("port", PORT);
 
-instrument(io, {
-	auth: false,
-	mode: "development",
-});
+// instrument(io, {
+// 	auth: false,
+// 	mode: "development",
+// });
 
 server.listen(PORT, () => {
-	console.log(`🚀 Server listening on http://localhost:${PORT}`);
+	console.log(`🚀 Server listening on port ${PORT}`);
 });
 
 function createRoom(
