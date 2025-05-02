@@ -33,11 +33,11 @@ io.on("connection", (socket: Socket) => {
 	socket.on(
 		"create-room",
 
-		({ repetition, phrase, ownerName, partnerName }, callback) => {
+		({ repetitions, phrase, ownerName, partnerName }, callback) => {
 			const roomId = createRoom(
 				socket,
 				phrase,
-				repetition,
+				parseInt(repetitions),
 				ownerName,
 				partnerName
 			);
@@ -46,6 +46,11 @@ io.on("connection", (socket: Socket) => {
 			callback({ room: rooms[roomId] });
 		}
 	);
+
+	socket.on("punishment-message", (roomId: string, message: string) => {
+		console.log(message);
+		socket.to(roomId).emit("punishment-message", roomId, message);
+	});
 
 	socket.on(
 		"join-room",
@@ -81,12 +86,14 @@ io.on("connection", (socket: Socket) => {
 		socket.to(roomId).emit("typing", text);
 	});
 
-	socket.on("submit-phrase", (roomId: string, phrase: string) => {
+	socket.on("submit-phrase", (roomId: string, phrase: string, date: Date) => {
 		console.log("submit-phrase", phrase, roomId);
 		const room = rooms[roomId];
+		let correct = false;
 		if (room) {
 			if (phrase.trim() === room.phrase) {
 				room.hits++;
+				correct = true;
 			} else {
 				room.misses++;
 			}
@@ -97,9 +104,17 @@ io.on("connection", (socket: Socket) => {
 			room.messages.push({
 				id: Math.random().toString(36).substring(2, 8),
 				content: phrase,
-				createdAt: new Date(),
+				createdAt: date,
+				correct,
 			});
 			io.to(roomId).emit("message-added", room.messages);
+
+			console.log(typeof room.hits, typeof room.repetition);
+			if (room.hits === room.repetition) {
+				console.log("finished");
+				room.status = "finished";
+				io.to(roomId).emit("room-finished", roomId);
+			}
 		}
 	});
 
