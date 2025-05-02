@@ -76,7 +76,7 @@ io.on("connection", (socket: Socket) => {
 	socket.on("typing", (roomId: string, text: string) => {
 		if (rooms[roomId]) {
 			rooms[roomId].currentPhrase = text;
-			console.log(rooms[roomId].currentPhrase);
+			console.log("'" + rooms[roomId].currentPhrase + "'");
 		}
 		socket.to(roomId).emit("typing", text);
 	});
@@ -94,6 +94,12 @@ io.on("connection", (socket: Socket) => {
 
 			console.log("phrase-submitted", phrase, roomId, room.phrase);
 			io.to(roomId).emit("phrase-submitted", room.hits, room.misses);
+			room.messages.push({
+				id: Math.random().toString(36).substring(2, 8),
+				content: phrase,
+				createdAt: new Date(),
+			});
+			io.to(roomId).emit("message-added", room.messages);
 		}
 	});
 
@@ -132,6 +138,8 @@ function createRoom(
 		misses: 0,
 		currentPhrase: "",
 		roomId,
+		status: "playing",
+		messages: [],
 	};
 	return roomId;
 }
