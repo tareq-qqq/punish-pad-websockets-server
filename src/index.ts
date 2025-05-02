@@ -17,7 +17,11 @@ const rooms: Record<string, Room> = {};
 // Socket.IO server setup
 const io = new Server(server, {
 	cors: {
-		origin: ["http://localhost:3000", "https://admin.socket.io"], // <-- Allow all origins for now. Set specific domains later!  // methods: ["GET", "POST"],
+		origin: [
+			"http://localhost:3000",
+			"https://admin.socket.io",
+			"http://192.168.1.10:3000",
+		], // <-- Allow all origins for now. Set specific domains later!  // methods: ["GET", "POST"],
 		credentials: true,
 	},
 });
@@ -38,6 +42,7 @@ io.on("connection", (socket: Socket) => {
 				partnerName
 			);
 			socket.join(roomId);
+			console.log(rooms[roomId]);
 			callback({ room: rooms[roomId] });
 		}
 	);
@@ -59,6 +64,7 @@ io.on("connection", (socket: Socket) => {
 			socket.to(roomId).emit("joined-room", roomId, socket.id);
 
 			console.log("Joined room", roomId, socket.id);
+			console.log(rooms[roomId]);
 
 			//acknowledge
 			callback({ room: rooms[roomId] });
@@ -66,9 +72,29 @@ io.on("connection", (socket: Socket) => {
 	);
 	// Handle disconnection
 
+	// don't allow the same browser to join the same room twice
 	socket.on("typing", (roomId: string, text: string) => {
-		rooms[roomId].currentPhrase = text;
+		if (rooms[roomId]) {
+			rooms[roomId].currentPhrase = text;
+			console.log(rooms[roomId].currentPhrase);
+		}
 		socket.to(roomId).emit("typing", text);
+	});
+
+	socket.on("submit-phrase", (roomId: string, phrase: string) => {
+		console.log("submit-phrase", phrase, roomId);
+		const room = rooms[roomId];
+		if (room) {
+			if (phrase.trim() === room.phrase) {
+				room.hits++;
+			} else {
+				room.misses++;
+			}
+			console.log(room.hits);
+
+			console.log("phrase-submitted", phrase, roomId, room.phrase);
+			io.to(roomId).emit("phrase-submitted", room.hits, room.misses);
+		}
 	});
 
 	socket.on("disconnect", (reason) => {
@@ -97,7 +123,7 @@ function createRoom(
 ) {
 	const roomId = Math.random().toString(36).substring(2, 8);
 	rooms[roomId] = {
-		phrase,
+		phrase: phrase.trim(),
 		repetition,
 		ownerName,
 		partnerName,

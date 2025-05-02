@@ -8,4 +8,12 @@ export interface Room {
 	misses: number;
 	currentPhrase: string;
 	roomId: string;
+	status: "playing" | "finished";
+	messages: Message[];
+}
+
+export interface Message {
+	id: string;
+	content: string;
+	createdAt: Date;
 }
