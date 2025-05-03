@@ -20,7 +20,8 @@ console.log("front end url", FRONTEND_URL);
 // Socket.IO server setup
 const io = new Server(server, {
 	cors: {
-		origin: ["https://admin.socket.io", FRONTEND_URL as string], // <-- Allow all origins for now. Set specific domains later!  // methods: ["GET", "POST"],
+		origin: ["https://admin.socket.io", FRONTEND_URL as string], // <-- Allow all origins for now. Set specific domains later!  
+		methods: ["GET", "POST"],
 		credentials: true,
 	},
 });
