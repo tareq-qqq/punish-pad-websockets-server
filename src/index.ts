@@ -6,11 +6,15 @@ import http from "http";
 import { Server, Socket } from "socket.io";
 import { Room } from "./types";
 import admin from "firebase-admin";
-import serviceAccount from "../punish-pad-firebase-admin-private-key.json" with {type: "json"};
-
 dotenv.config();
+const serviceAccountPath = process.env.GOOGLE_APPLICATION_CREDENTIALS; // set this in your .env or env vars
+console.log(serviceAccountPath);
 
-
+const serviceAccount = await import(serviceAccountPath as string, {
+	with: {
+		type: "json",
+	},
+});
 
 // Basic express setup
 const app = express();
@@ -24,10 +28,10 @@ const FRONTEND_URL = process.env.FRONTEND_URL;
 console.log("front end url", FRONTEND_URL);
 // Socket.IO server setup
 
-
-
 admin.initializeApp({
-	credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
+	credential: admin.credential.cert(
+		serviceAccount.default as admin.ServiceAccount
+	),
 });
 
 const io = new Server(server, {
@@ -98,53 +102,56 @@ io.on("connection", (socket: Socket) => {
 		socket.to(roomId).emit("typing", text);
 	});
 
-	socket.on("submit-phrase", async (roomId: string, phrase: string, date: Date) => {
-		console.log("submit-phrase", phrase, roomId);
-		const room = rooms[roomId];
-		let correct = false;
-		if (room) {
-			if (phrase.trim() === room.phrase) {
-				room.hits++;
-				correct = true;
-			} else {
-				room.misses++;
-			}
-			console.log(room.hits);
+	socket.on(
+		"submit-phrase",
+		async (roomId: string, phrase: string, date: Date) => {
+			console.log("submit-phrase", phrase, roomId);
+			const room = rooms[roomId];
+			let correct = false;
+			if (room) {
+				if (phrase.trim() === room.phrase) {
+					room.hits++;
+					correct = true;
+				} else {
+					room.misses++;
+				}
+				console.log(room.hits);
 
-			console.log("phrase-submitted", phrase, roomId, room.phrase);
-			io.to(roomId).emit("phrase-submitted", room.hits, room.misses);
-			room.messages.push({
-				id: Math.random().toString(36).substring(2, 8),
-				content: phrase,
-				createdAt: date,
-				correct,
-			});
-			io.to(roomId).emit("message-added", room.messages);
-
-			console.log(typeof room.hits, typeof room.repetition);
-
-			if (room.hits === room.repetition) {
-				console.log("finished");
-				room.status = "finished";
-				io.to(roomId).emit("room-finished", roomId);
-
-				const res = await admin.messaging().sendEachForMulticast({
-					tokens: room.tokens,
-					webpush: {
-						fcmOptions: {
-							link: `${FRONTEND_URL}/room/${roomId}`,
-						},
-					},
-					notification: {
-						title: "Punish Pad - room finished",
-						body: `${room.partnerName} has finished their punishment.`,
-					},
+				console.log("phrase-submitted", phrase, roomId, room.phrase);
+				io.to(roomId).emit("phrase-submitted", room.hits, room.misses);
+				room.messages.push({
+					id: Math.random().toString(36).substring(2, 8),
+					content: phrase,
+					createdAt: date,
+					correct,
 				});
+				io.to(roomId).emit("message-added", room.messages);
 
-				console.log(res.responses[0].error?.message)
+				console.log(typeof room.hits, typeof room.repetition);
+
+				if (room.hits === room.repetition) {
+					console.log("finished");
+					room.status = "finished";
+					io.to(roomId).emit("room-finished", roomId);
+
+					const res = await admin.messaging().sendEachForMulticast({
+						tokens: room.tokens,
+						webpush: {
+							fcmOptions: {
+								link: `${FRONTEND_URL}/room/${roomId}`,
+							},
+						},
+						notification: {
+							title: "Punish Pad - room finished",
+							body: `${room.partnerName} has finished their punishment.`,
+						},
+					});
+
+					console.log(res.responses[0].error?.message);
+				}
 			}
 		}
-	});
+	);
 
 	socket.on("disconnect", (reason) => {
 		console.log(`❌ Client disconnected: ${socket.id} (${reason})`);
