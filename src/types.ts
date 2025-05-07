@@ -10,6 +10,7 @@ export interface Room {
 	roomId: string;
 	status: "playing" | "finished";
 	messages: Message[];
+	tokens: string[];
 }
 
 export interface Message {

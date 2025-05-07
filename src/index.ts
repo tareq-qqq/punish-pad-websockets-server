@@ -1,16 +1,21 @@
-import { Socket } from "socket.io";
-import express from "express";
-import dotenv from "dotenv";
-dotenv.config();
-import http from "http";
-import { Server } from "socket.io";
-import { instrument } from "@socket.io/admin-ui";
+import bodyParser from "body-parser";
 import cors from "cors";
+import dotenv from "dotenv";
+import express, { Request, Response, response } from "express";
+import http from "http";
+import { Server, Socket } from "socket.io";
 import { Room } from "./types";
+import admin from "firebase-admin";
+import serviceAccount from "../punish-pad-firebase-admin-private-key.json" with {type: "json"};
+
+dotenv.config();
+
+
 
 // Basic express setup
 const app = express();
 app.use(cors());
+app.use(bodyParser.json());
 const server = http.createServer(app);
 
 const rooms: Record<string, Room> = {};
@@ -18,9 +23,16 @@ const rooms: Record<string, Room> = {};
 const FRONTEND_URL = process.env.FRONTEND_URL;
 console.log("front end url", FRONTEND_URL);
 // Socket.IO server setup
+
+
+
+admin.initializeApp({
+	credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
+});
+
 const io = new Server(server, {
 	cors: {
-		origin: ["https://admin.socket.io", FRONTEND_URL as string], // <-- Allow all origins for now. Set specific domains later!  
+		origin: ["https://admin.socket.io", FRONTEND_URL as string], // <-- Allow all origins for now. Set specific domains later!
 		methods: ["GET", "POST"],
 		credentials: true,
 	},
@@ -86,7 +98,7 @@ io.on("connection", (socket: Socket) => {
 		socket.to(roomId).emit("typing", text);
 	});
 
-	socket.on("submit-phrase", (roomId: string, phrase: string, date: Date) => {
+	socket.on("submit-phrase", async (roomId: string, phrase: string, date: Date) => {
 		console.log("submit-phrase", phrase, roomId);
 		const room = rooms[roomId];
 		let correct = false;
@@ -110,10 +122,26 @@ io.on("connection", (socket: Socket) => {
 			io.to(roomId).emit("message-added", room.messages);
 
 			console.log(typeof room.hits, typeof room.repetition);
+
 			if (room.hits === room.repetition) {
 				console.log("finished");
 				room.status = "finished";
 				io.to(roomId).emit("room-finished", roomId);
+
+				const res = await admin.messaging().sendEachForMulticast({
+					tokens: room.tokens,
+					webpush: {
+						fcmOptions: {
+							link: `${FRONTEND_URL}/room/${roomId}`,
+						},
+					},
+					notification: {
+						title: "Punish Pad - room finished",
+						body: `${room.partnerName} has finished their punishment.`,
+					},
+				});
+
+				console.log(res.responses[0].error?.message)
 			}
 		}
 	});
@@ -121,6 +149,23 @@ io.on("connection", (socket: Socket) => {
 	socket.on("disconnect", (reason) => {
 		console.log(`❌ Client disconnected: ${socket.id} (${reason})`);
 	});
+});
+
+app.post("/send-token", (req: Request, res: Response) => {
+	const { token, roomId } = req.body;
+	if (!roomId) {
+		res.send({ message: "Room id is required" }).status(400);
+		return;
+	}
+	if (!rooms[roomId]) {
+		res.send({ message: "Room not found" }).status(404);
+		return;
+	}
+	if (!rooms[roomId].tokens.includes(token)) {
+		rooms[roomId].tokens.push(token);
+	}
+	console.log(rooms[roomId].tokens);
+	res.send({ message: "success" });
 });
 
 // Start server
@@ -156,6 +201,7 @@ function createRoom(
 		roomId,
 		status: "playing",
 		messages: [],
+		tokens: [],
 	};
 	return roomId;
 }
